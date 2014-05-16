@@ -425,6 +425,87 @@ public abstract class BaseStatusBar extends SystemUI implements
 
         SettingsObserver settingsObserver = new SettingsObserver(new Handler());
         settingsObserver.observe();
+
+        OrientationEventListener orientationListener
+                = new OrientationEventListener(mContext, SensorManager.SENSOR_DELAY_NORMAL) {
+            @Override
+            public void onOrientationChanged(int orientation) {
+                int rotation = mDisplay.getRotation();
+                if (rotation != mOrientation) {
+                    if (mPieController != null) mPieController.detachPie();
+                    mOrientation = rotation;
+                }
+            }
+        };
+        orientationListener.enable();
+
+        // Listen for HALO state
+        mContext.getContentResolver().registerContentObserver(
+                Settings.System.getUriFor(Settings.System.HALO_ACTIVE), false, new ContentObserver(new Handler()) {
+            @Override
+            public void onChange(boolean selfChange) {
+                updateHalo();
+            }});
+
+        mContext.getContentResolver().registerContentObserver(
+                Settings.System.getUriFor(Settings.System.HALO_SIZE), false, new ContentObserver(new Handler()) {
+            @Override
+            public void onChange(boolean selfChange) {
+                restartHalo();
+            }});
+
+        mContext.getContentResolver().registerContentObserver(
+                Settings.System.getUriFor(Settings.System.HALO_COLOR), false, new ContentObserver(new Handler()) {
+            @Override
+            public void onChange(boolean selfChange) {
+                restartHalo();
+            }});
+
+        updateHalo();
+    }
+
+    public void setHaloTaskerActive(boolean haloTaskerActive, boolean updateNotificationIcons) {
+        mHaloTaskerActive = haloTaskerActive;
+        if (updateNotificationIcons) {
+            updateNotificationIcons();
+        }
+    }
+
+    public void restartHalo() {
+        if (mHalo != null) {
+            mHalo.cleanUp();
+            mWindowManager.removeView(mHalo);
+            mHalo = null;
+        }
+        updateNotificationIcons();
+        updateHalo();
+    }
+
+    protected void updateHalo() {
+        mHaloActive = Settings.System.getInt(mContext.getContentResolver(),
+                Settings.System.HALO_ACTIVE, 0) == 1;
+
+        mHaloButton.setImageResource(mHaloActive
+                ? R.drawable.ic_notify_halo_pressed
+                : R.drawable.ic_notify_halo_normal);
+
+        if (mHaloActive) {
+            if (mHalo == null) {
+                LayoutInflater inflater = (LayoutInflater) mContext
+                        .getSystemService(Context.LAYOUT_INFLATER_SERVICE);
+                mHalo = (Halo)inflater.inflate(R.layout.halo_trigger, null);
+                mHalo.setLayerType (View.LAYER_TYPE_HARDWARE, null);
+                WindowManager.LayoutParams params = mHalo.getWMParams();
+                mWindowManager.addView(mHalo,params);
+                mHalo.setStatusBar(this);
+            }
+        } else {
+            if (mHalo != null) {
+                mHalo.cleanUp();
+                mWindowManager.removeView(mHalo);
+                mHalo = null;
+            }
+        }
     }
 
     public void updatePieControls(boolean reset) {
@@ -494,67 +575,6 @@ public abstract class BaseStatusBar extends SystemUI implements
                     }
                 }
             };
-
-        // Listen for HALO state
-        mContext.getContentResolver().registerContentObserver(
-                Settings.System.getUriFor(Settings.System.HALO_ACTIVE), false, new ContentObserver(new Handler()) {
-            @Override
-            public void onChange(boolean selfChange) {
-                updateHalo();
-            }});
-
-        mContext.getContentResolver().registerContentObserver(
-                Settings.System.getUriFor(Settings.System.HALO_SIZE), false, new ContentObserver(new Handler()) {
-            @Override
-            public void onChange(boolean selfChange) {
-                restartHalo();
-            }});
-
-        updateHalo();
-    }
-
-    public void setHaloTaskerActive(boolean haloTaskerActive, boolean updateNotificationIcons) {
-        mHaloTaskerActive = haloTaskerActive;
-        if (updateNotificationIcons) {
-            updateNotificationIcons();
-        }
-    }
-
-    public void restartHalo() {
-        if (mHalo != null) {
-            mHalo.cleanUp();
-            mWindowManager.removeView(mHalo);
-            mHalo = null;
-        }
-        updateNotificationIcons();
-        updateHalo();
-    }
-
-    protected void updateHalo() {
-        mHaloActive = Settings.System.getInt(mContext.getContentResolver(),
-                Settings.System.HALO_ACTIVE, 0) == 1;
-
-        mHaloButton.setImageResource(mHaloActive
-                ? R.drawable.ic_notify_halo_pressed
-                : R.drawable.ic_notify_halo_normal);
-
-        if (mHaloActive) {
-            if (mHalo == null) {
-                LayoutInflater inflater = (LayoutInflater) mContext
-                        .getSystemService(Context.LAYOUT_INFLATER_SERVICE);
-                mHalo = (Halo)inflater.inflate(R.layout.halo_trigger, null);
-                mHalo.setLayerType (View.LAYER_TYPE_HARDWARE, null);
-                WindowManager.LayoutParams params = mHalo.getWMParams();
-                mWindowManager.addView(mHalo,params);
-                mHalo.setStatusBar(this);
-            }
-        } else {
-            if (mHalo != null) {
-                mHalo.cleanUp();
-                mWindowManager.removeView(mHalo);
-                mHalo = null;
-            }
-        }
     }
 
     public void userSwitched(int newUserId) {
