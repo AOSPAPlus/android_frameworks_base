@@ -92,13 +92,14 @@ import com.android.systemui.recent.RecentTasksLoader;
 import com.android.systemui.recent.TaskDescription;
 import com.android.systemui.SearchPanelView;
 import com.android.systemui.SystemUI;
-import com.android.systemui.statusbar.notification.NotificationPeek;
-import com.android.systemui.statusbar.policy.BatteryController;
-import com.android.systemui.statusbar.policy.Clock;
+import com.android.systemui.statusbar.notification.NotificationHelper;
+import com.android.systemui.statusbar.notification.Peek;
 import com.android.systemui.statusbar.phone.Ticker;
 import com.android.systemui.statusbar.phone.KeyguardTouchDelegate;
 import com.android.systemui.statusbar.pie.PieControlPanel;
 import com.android.systemui.statusbar.pie.PieController;
+import com.android.systemui.statusbar.policy.BatteryController;
+import com.android.systemui.statusbar.policy.Clock;
 import com.android.systemui.statusbar.policy.NetworkController;
 import com.android.systemui.statusbar.phone.PhoneStatusBar;
 import com.android.systemui.statusbar.halo.Halo;
@@ -177,8 +178,11 @@ public abstract class BaseStatusBar extends SystemUI implements
     PowerManager mPowerManager;
     protected int mRowHeight;
 
-    // Notification peek
-    protected NotificationPeek mNotificationPeek;
+    // Notification helper
+    protected NotificationHelper mNotificationHelper;
+
+    // Peek
+    protected Peek mPeek;
 
     // Halo
     protected Halo mHalo = null;
@@ -355,7 +359,10 @@ public abstract class BaseStatusBar extends SystemUI implements
         mLocale = mContext.getResources().getConfiguration().locale;
         mLayoutDirection = TextUtils.getLayoutDirectionFromLocale(mLocale);
 
-        mNotificationPeek = new NotificationPeek(this, mContext);
+        mPeek = new Peek(this, mContext);
+        mNotificationHelper = new NotificationHelper(this, mContext);
+
+        mPeek.setNotificationHelper(mNotificationHelper);
 
         // Connect in to the status bar manager service
         StatusBarIconList iconList = new StatusBarIconList();
@@ -506,6 +513,17 @@ public abstract class BaseStatusBar extends SystemUI implements
                 mHalo = null;
             }
         }
+    }
+
+    public Peek getPeekInstance() {
+        if(mPeek == null) mPeek = new Peek(this, mContext);
+        return mPeek;
+    }
+
+    public PowerManager getPowerManagerInstance() {
+        if(mPowerManager == null) mPowerManager
+                = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
+        return mPowerManager;
     }
 
     public void updatePieControls(boolean reset) {
@@ -1181,7 +1199,7 @@ public abstract class BaseStatusBar extends SystemUI implements
             visibilityChanged(false);
 
             // hide notification peek screen
-            mNotificationPeek.dismissNotification();
+            mPeek.dismissNotification();
         }
     }
 
@@ -1230,7 +1248,7 @@ public abstract class BaseStatusBar extends SystemUI implements
         updateExpansionStates();
         updateNotificationIcons();
 
-        mNotificationPeek.removeNotification(entry.notification);
+        mPeek.removeNotification(entry.notification);
 
         return entry.notification;
     }
@@ -1366,7 +1384,16 @@ public abstract class BaseStatusBar extends SystemUI implements
         updateExpansionStates();
         updateNotificationIcons();
 
-        mNotificationPeek.showNotification(entry.notification, false);
+        if (!mPowerManager.isScreenOn()) {
+            // screen off - check if peek is enabled
+            if (mNotificationHelper.isPeekEnabled()) {
+                mPeek.showNotification(entry.notification, false);
+            } else {
+                mPeek.addNotification(entry.notification);
+            }
+        } else {
+            mPeek.addNotification(entry.notification);
+        }
     }
 
     private void addNotificationViews(IBinder key, StatusBarNotification notification) {
@@ -1560,9 +1587,20 @@ public abstract class BaseStatusBar extends SystemUI implements
             entry.content.setOnClickListener(null);
             entry.floatingIntent = null;
         }
-        mNotificationPeek.showNotification(entry.notification, true);
+
         // Update the roundIcon
         prepareHaloNotification(entry, notification, true);
+
+        if (!mPowerManager.isScreenOn()) {
+            // screen off - check if peek is enabled
+            if (mNotificationHelper.isPeekEnabled()) {
+                mPeek.showNotification(entry.notification, true);
+            } else {
+                mPeek.addNotification(entry.notification);
+            }
+        } else {
+            mPeek.addNotification(entry.notification);
+        }
     }
 
     protected void notifyHeadsUpScreenOn(boolean screenOn) {
